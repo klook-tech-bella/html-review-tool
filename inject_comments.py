@@ -127,11 +127,12 @@ INJECT = r"""
   function showCommentsFor(sel) {
     var items = state.comments.filter(function(c) { return c.selector === sel; });
     var labelMap = { must: '必改', suggest: '建议', question: '疑问' };
+    var loc = (items[0] && items[0].label) ? items[0].label : sel;
     var texts = items.map(function(c) {
       return '[' + (labelMap[c.severity] || c.severity) + '] '
              + (c.reviewer || '匿名') + ': ' + c.text;
     }).join('\n\n');
-    alert(texts);
+    alert('📍 ' + loc + '\n\n' + texts);
   }
 
   var hoverEl = null;
@@ -182,9 +183,17 @@ INJECT = r"""
       var sev = document.querySelector('input[name="rv-sev"]:checked').value;
       state.reviewer = document.getElementById('rv-reviewer').value.trim() || '匿名';
       localStorage.setItem('rv-reviewer', state.reviewer);
+      var targetEl = queryEl(sel);
+      var label = '';
+      if (targetEl) {
+        var t = (targetEl.innerText || targetEl.textContent || '').trim().replace(/\s+/g, ' ');
+        if (t.length > 40) t = t.slice(0, 40) + '…';
+        label = t || ('<' + targetEl.tagName.toLowerCase() + '>');
+      }
       state.comments.push({
         id: 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
         selector: sel,
+        label: label,
         text: text,
         severity: sev,
         reviewer: state.reviewer,
@@ -237,7 +246,7 @@ INJECT = r"""
           '<span class="rv-sev-tag rv-sev-' + c.severity + '">'
           + (labelMap[c.severity] || c.severity) + '</span>'
           + '<b>' + (c.reviewer || '匿名') + '</b>: ' + c.text
-          + '<div style="color:#999;font-size:10px;margin-top:2px">' + c.selector + '</div>';
+          + '<div style="color:#999;font-size:11px;margin-top:3px">📍 ' + (c.label || c.selector) + '</div>';
         item.onclick = function() {
           var el = queryEl(c.selector);
           if (el) {
@@ -280,10 +289,16 @@ INJECT = r"""
 """
 
 def inject(input_path, output_path=None):
+    import re
     with open(input_path, 'r', encoding='utf-8') as f:
         html = f.read()
     if '</body>' not in html:
         raise ValueError('HTML 缺少 </body> 标签，无法注入')
+    # 保留旧评论数据（升级工具时评论不丢）
+    old_data = None
+    m = re.search(r'<script id="rv-data"[^>]*>([\s\S]*?)</script>', html)
+    if m:
+        old_data = m.group(1).strip()
     # 幂等：如果已经注入过，先剥离旧版本
     start_marker = '<!-- ===== Review Tool (auto-injected) ===== -->'
     end_marker = '<!-- ===== /Review Tool ===== -->'
@@ -292,6 +307,14 @@ def inject(input_path, output_path=None):
         e = html.index(end_marker) + len(end_marker)
         html = html[:s] + html[e:]
     new_html = html.replace('</body>', INJECT + '\n</body>', 1)
+    # 回填旧评论（如果有）
+    if old_data and old_data != '{"comments":[]}':
+        new_html = re.sub(
+            r'(<script id="rv-data"[^>]*>)[\s\S]*?(</script>)',
+            lambda mm: mm.group(1) + old_data + mm.group(2),
+            new_html,
+            count=1
+        )
     if output_path is None:
         base, ext = os.path.splitext(input_path)
         output_path = f'{base}_review{ext}'
