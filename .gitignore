@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.DS_Store
+*_review.html
+*_review_*.html
+!examples/*_review.html
+.vscode/
+.idea/

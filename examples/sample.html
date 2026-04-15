@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Sample Demo — html-review-tool</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #2D2040; }
+    h1 { color: #5B3E8A; }
+    .card { background: #F8F7FC; border-radius: 8px; padding: 20px; margin: 16px 0; border-left: 4px solid #7B5EA7; }
+    .card h3 { margin: 0 0 8px 0; }
+    .card p { margin: 0; color: #666; font-size: 14px; line-height: 1.6; }
+    button { background: #7B5EA7; color: #fff; border: 0; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    button:hover { background: #5B3E8A; }
+    .tip { background: #fef9e7; border: 1px solid #f5e6cc; padding: 12px; border-radius: 6px; font-size: 13px; color: #8a6d3b; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <h1>Sample Demo</h1>
+  <p>这是一个用于演示 html-review-tool 的示例页面。运行注入脚本后，右上角会出现评审工具条。</p>
+
+  <div class="tip">
+    💡 试一下：运行 <code>python3 inject_comments.py examples/sample.html</code>，然后打开 <code>examples/sample_review.html</code>。
+  </div>
+
+  <div class="card">
+    <h3>卡片 A</h3>
+    <p>任意 HTML 元素都可以被评论，包括这段文字、这个卡片、下面的按钮。</p>
+  </div>
+
+  <div class="card">
+    <h3>卡片 B</h3>
+    <p>评审人点开"开启评审"后，鼠标悬停会高亮，点击会弹出评论输入框。</p>
+  </div>
+
+  <button>示例按钮</button>
+
+  <p style="margin-top: 40px; color: #999; font-size: 12px;">Powered by <a href="https://github.com/" style="color: #7B5EA7;">html-review-tool</a></p>
+</body>
+</html>
