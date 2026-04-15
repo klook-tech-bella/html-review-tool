@@ -99,6 +99,15 @@ INJECT = r"""
     try { return document.querySelector(sel); } catch(e) { return null; }
   }
 
+  function getLabel(c) {
+    if (c.label) return c.label;
+    var el = queryEl(c.selector);
+    if (!el) return c.selector;
+    var t = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
+    if (t.length > 40) t = t.slice(0, 40) + '…';
+    return t || ('<' + el.tagName.toLowerCase() + '>');
+  }
+
   function renderMarkers() {
     var old = document.querySelectorAll('.rv-marker');
     for (var i = 0; i < old.length; i++) old[i].remove();
@@ -127,7 +136,7 @@ INJECT = r"""
   function showCommentsFor(sel) {
     var items = state.comments.filter(function(c) { return c.selector === sel; });
     var labelMap = { must: '必改', suggest: '建议', question: '疑问' };
-    var loc = (items[0] && items[0].label) ? items[0].label : sel;
+    var loc = items[0] ? getLabel(items[0]) : sel;
     var texts = items.map(function(c) {
       return '[' + (labelMap[c.severity] || c.severity) + '] '
              + (c.reviewer || '匿名') + ': ' + c.text;
@@ -246,7 +255,7 @@ INJECT = r"""
           '<span class="rv-sev-tag rv-sev-' + c.severity + '">'
           + (labelMap[c.severity] || c.severity) + '</span>'
           + '<b>' + (c.reviewer || '匿名') + '</b>: ' + c.text
-          + '<div style="color:#999;font-size:11px;margin-top:3px">📍 ' + (c.label || c.selector) + '</div>';
+          + '<div style="color:#999;font-size:11px;margin-top:3px">📍 ' + getLabel(c) + '</div>';
         item.onclick = function() {
           var el = queryEl(c.selector);
           if (el) {
