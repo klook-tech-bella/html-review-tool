@@ -12,10 +12,135 @@ import os
 import argparse
 from datetime import datetime
 from collections import defaultdict
+from html.parser import HTMLParser
 
 SEV_LABEL = {'must': '必改', 'suggest': '建议', 'question': '疑问'}
 SEV_ICON = {'must': '🔴', 'suggest': '🟡', 'question': '💭'}
 SEV_ORDER = ['must', 'suggest', 'question']
+VOID_TAGS = {'br', 'img', 'input', 'hr', 'meta', 'link', 'area', 'base',
+             'col', 'embed', 'param', 'source', 'track', 'wbr'}
+
+
+class DOMBuilder(HTMLParser):
+    """极简 DOM 树构造器 —— 用于对评论 selector 做 querySelector 定位。"""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.root = {'tag': '#doc', 'children': [], 'text': [], 'parent': None, 'attrs': {}}
+        self.current = self.root
+        self.skip_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        node = {'tag': tag, 'children': [], 'text': [], 'parent': self.current, 'attrs': dict(attrs)}
+        self.current['children'].append(node)
+        if tag in VOID_TAGS:
+            return
+        self.current = node
+        if tag in ('script', 'style'):
+            self.skip_depth += 1
+
+    def handle_startendtag(self, tag, attrs):
+        node = {'tag': tag, 'children': [], 'text': [], 'parent': self.current, 'attrs': dict(attrs)}
+        self.current['children'].append(node)
+
+    def handle_endtag(self, tag):
+        if tag in VOID_TAGS:
+            return
+        node = self.current
+        while node.get('parent') is not None and node.get('tag') != tag:
+            node = node['parent']
+        if node.get('parent') is not None:
+            self.current = node['parent']
+        if tag in ('script', 'style') and self.skip_depth > 0:
+            self.skip_depth -= 1
+
+    def handle_data(self, data):
+        if self.skip_depth > 0:
+            return
+        self.current['text'].append(data)
+
+
+def get_inner_text(node, max_len=40):
+    """递归拿 innerText。"""
+    parts = []
+
+    def walk(n):
+        parts.extend(n.get('text', []))
+        for c in n.get('children', []):
+            walk(c)
+
+    walk(node)
+    text = ' '.join(p.strip() for p in parts if p.strip())
+    text = re.sub(r'\s+', ' ', text).strip()
+    if len(text) > max_len:
+        text = text[:max_len] + '…'
+    return text or ('<' + node.get('tag', '?') + '>')
+
+
+def query_selector(root, sel):
+    """极简 querySelector — 支持 `#id` 起始 或 `tag:nth-child(n) > ...`。"""
+    parts = [p.strip() for p in sel.split('>')]
+    if not parts:
+        return None
+
+    # 第一段是 #id → 全局查找
+    if parts[0].startswith('#'):
+        target_id = parts[0][1:]
+
+        def find_id(n):
+            if n.get('attrs', {}).get('id') == target_id:
+                return n
+            for c in n.get('children', []):
+                r = find_id(c)
+                if r:
+                    return r
+            return None
+
+        node = find_id(root)
+        parts = parts[1:]
+    else:
+        # 从 body 起步
+        node = None
+        for c in root.get('children', []):
+            if c['tag'] == 'html':
+                for g in c.get('children', []):
+                    if g['tag'] == 'body':
+                        node = g
+                        break
+            if c['tag'] == 'body':
+                node = c
+
+    if node is None:
+        return None
+
+    for p in parts:
+        m = re.match(r'^(\w+)(?::nth-child\((\d+)\))?$', p)
+        if not m:
+            return None
+        tag, nth = m.group(1), m.group(2)
+        children = node.get('children', [])
+        if nth is not None:
+            idx = int(nth) - 1
+            if 0 <= idx < len(children) and children[idx]['tag'] == tag:
+                node = children[idx]
+            else:
+                return None
+        else:
+            node = next((c for c in children if c['tag'] == tag), None)
+            if node is None:
+                return None
+    return node
+
+
+def build_dom_index(path):
+    """读 HTML 并构建 DOM 树。失败返回 None。"""
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            html = f.read()
+        builder = DOMBuilder()
+        builder.feed(html)
+        return builder.root
+    except Exception:
+        return None
 
 
 def parse_review_html(path):
@@ -31,8 +156,17 @@ def parse_review_html(path):
         return []
     comments = data.get('comments', [])
     basename = os.path.basename(path)
+    # 如果评论没 label，用 DOM 解析补上
+    dom = None
     for c in comments:
         c['_source'] = basename
+        if not c.get('label') and c.get('selector'):
+            if dom is None:
+                dom = build_dom_index(path)
+            if dom is not None:
+                el = query_selector(dom, c['selector'])
+                if el is not None:
+                    c['label'] = get_inner_text(el)
     return comments
 
 
