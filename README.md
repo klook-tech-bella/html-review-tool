@@ -17,7 +17,7 @@
 - ❌ 上传到 Figma → HTML 交互丢失，变成静态图
 - ✅ **html-review-tool** → HTML 文件互传，点元素留评论，完全离线
 
-### 工作流
+### 完整闭环
 
 ```
 [作者]
@@ -29,14 +29,23 @@
          → 点"💾 保存" → 下载 your_demo_review_张三.html
          ↓ 回传
 [作者]
-  双击打开 → 看到所有评论标注
+  方式 A：双击打开 → 浏览器里看所有评论标注
+  方式 B：python3 extract_comments.py your_demo_review_张三.html
+        → 生成结构化 Markdown 报告（按必改/建议/疑问分组）
+        → 扔给 AI 读 → 直接修改源项目
 ```
+
+**两个脚本分别做什么**：
+| 脚本 | 作用 | 触发时机 |
+|------|------|---------|
+| `inject_comments.py` | 给 HTML 加评审工具条 | 你做完 demo，要发评审之前 |
+| `extract_comments.py` | 从回传的 HTML 里抽取评论，生成 Markdown 报告 | 评审人回传之后，你要改项目之前 |
 
 ### 快速开始
 
 ```bash
 # 1. Clone
-git clone https://github.com/<your-username>/html-review-tool.git
+git clone https://github.com/klook-tech-bella/html-review-tool.git
 cd html-review-tool
 
 # 2. 试一下示例
@@ -45,6 +54,12 @@ open examples/sample_review.html
 
 # 3. 给自己的 HTML 用
 python3 inject_comments.py /path/to/your_demo.html
+
+# 4. 收到评审回传后，提取评论成 Markdown 报告
+python3 extract_comments.py your_demo_review_张三.html -o report.md
+
+# 多份评审合并
+python3 extract_comments.py *_review_*.html -o report.md
 ```
 
 ### 评审工具条功能
@@ -61,14 +76,27 @@ python3 inject_comments.py /path/to/your_demo.html
 - 点击元素 → 弹出评论框（必改 / 建议 / 疑问）
 - 元素右上角显示红色数字标记，点标记看评论
 
-### 作为 Claude Code Skill 使用
+### 配合 AI 使用
 
-如果你用 Claude Code，可以把 `SKILL.md` 和 `inject_comments.py` 复制到 `~/.claude/skills/inject-review/`，之后跟 Claude 说 `/inject-review` 或 "帮我给这个 HTML 加评论功能"，它会自动跑。
+#### Claude Code（最流畅）
+把 `SKILL.md`、`inject_comments.py`、`extract_comments.py` 复制到 `~/.claude/skills/inject-review/`：
 
 ```bash
 mkdir -p ~/.claude/skills/inject-review
-cp SKILL.md inject_comments.py ~/.claude/skills/inject-review/
+cp SKILL.md inject_comments.py extract_comments.py ~/.claude/skills/inject-review/
 ```
+
+之后直接跟 Claude 说：
+- `/inject-review` 或 "帮我给这个 HTML 加评论功能" → 自动注入
+- `/extract-review` 或 "帮我看下这份评审" / "提取评论" → 自动跑 extract + 展示报告 + 问你要不要改
+
+#### Claude.ai 网页版 / Claude Desktop
+也能用，只是没有 Skill 自动触发。上传 HTML 后直接说：
+- "跑一下这个仓库里的 `inject_comments.py` 给这个 HTML 注入评论功能" → 下载结果
+- "跑一下 `extract_comments.py` 提取评论成 Markdown" → 读报告再改源项目
+
+#### 其他 AI（Cursor / Cline / ChatGPT 代码沙箱）
+一样，只要能跑 Python 就能用，脚本纯标准库，无依赖。
 
 ### 多人评审
 
@@ -108,18 +136,26 @@ open examples/sample_review.html
 2. Author sends the file to reviewers (WeChat, email, anything)
 3. Reviewer opens in browser, enters name, clicks "开启评审" (Start Review), clicks elements to comment
 4. Reviewer clicks "💾 保存" to download `my_demo_review_<name>.html`
-5. Reviewer sends it back; author double-clicks to see all annotations
+5. Reviewer sends it back; author either:
+   - Double-clicks to see annotations in browser, OR
+   - Runs `python3 extract_comments.py my_demo_review_<name>.html -o report.md` → gets a structured Markdown report (grouped by severity) → feed to AI to fix the source project
 
-### Claude Code Skill
+### Two scripts, two phases
 
-This repo ships with a `SKILL.md` compatible with Claude Code's skills system. Install it:
+| Script | Phase |
+|--------|-------|
+| `inject_comments.py` | Before review — add toolbar to HTML |
+| `extract_comments.py` | After review — extract comments to Markdown report |
 
+### Works with AI
+
+**Claude Code** — install as a skill, then use `/inject-review` or `/extract-review`:
 ```bash
 mkdir -p ~/.claude/skills/inject-review
-cp SKILL.md inject_comments.py ~/.claude/skills/inject-review/
+cp SKILL.md inject_comments.py extract_comments.py ~/.claude/skills/inject-review/
 ```
 
-Then in Claude Code: `/inject-review` or just say "add review comments to this HTML".
+**Claude.ai / ChatGPT / Cursor / any AI with Python sandbox** — upload the HTML and ask the AI to run the scripts. Pure stdlib, zero dependencies.
 
 ### License
 
